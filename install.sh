@@ -16,16 +16,16 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
 echo "downloading the latest release..."
-if curl -fsSL -o "$tmp/app.zip" "https://github.com/$REPO/releases/latest/download/$EXECUTABLE.zip"; then
+if curl -fsSL -o "$tmp/app.zip" "https://github.com/$REPO/releases/latest/download/$EXECUTABLE.zip" 2>/dev/null; then
   ditto -x -k "$tmp/app.zip" "$tmp/out"
 else
-  echo "no release found, building from source..."
+  echo "no release found, building from source (about a minute)..."
   xcode-select -p >/dev/null 2>&1 || {
     xcode-select --install 2>/dev/null || true
     fail "install the Xcode command line tools from the dialog, then run this again."
   }
   git clone --quiet --depth 1 "https://github.com/$REPO.git" "$tmp/src"
-  "$tmp/src/scripts/build-app.sh" >/dev/null
+  "$tmp/src/scripts/build-app.sh" >"$tmp/build.log" 2>&1 || { tail -20 "$tmp/build.log" >&2; fail "the build failed."; }
   mkdir -p "$tmp/out"
   ditto "$tmp/src/build/$NAME.app" "$tmp/out/$NAME.app"
 fi
