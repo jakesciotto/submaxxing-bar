@@ -18,13 +18,10 @@ import Testing
     #expect(snapshot.meters[3].kind == .spend)
     #expect(snapshot.meters[3].detail == "$312 / $500")
     #expect(snapshot.peakPercent == 13)
-    let expected = Date(timeIntervalSince1970: 1_794_333_600.123)
-    #expect(abs(snapshot.meters[0].resetsAt!.timeIntervalSince(expected)) < 0.001)
-}
-
-@Test func claudePlanLabelPrefersSubscriptionTypeOverTier() {
     #expect(ClaudeParser.planLabel(type: "team", tier: "default_claude_max_5x") == "Team")
     #expect(ClaudeParser.planLabel(type: "max", tier: "default_claude_max_20x") == "Max 20x")
+    let expected = Date(timeIntervalSince1970: 1_794_333_600.123)
+    #expect(abs(snapshot.meters[0].resetsAt!.timeIntervalSince(expected)) < 0.001)
 }
 
 @Test func codexLabelsWindowsByLengthAndResolvesBothResetForms() throws {
@@ -62,4 +59,23 @@ import Testing
     #expect(throws: FetchError.self) {
         try CursorParser.parse(Data(#"{"startOfMonth":"2026-11-01"}"#.utf8), membership: nil, now: Date())
     }
+}
+
+@Test func breakdownDedupesRepeatsSkipsCacheReadsAndSplitsWindows() {
+    let now = Date(timeIntervalSince1970: 1_794_000_000)
+    func line(_ id: String, _ model: String, hoursAgo: Double, input: Int, cacheRead: Int, output: Int) -> String {
+        let time = ISO8601DateFormatter().string(from: now.addingTimeInterval(-hoursAgo * 3600))
+        return #"{"type":"assistant","requestId":"r\#(id)","timestamp":"\#(time)","message":{"id":"m\#(id)","model":"\#(model)","usage":{"input_tokens":\#(input),"cache_read_input_tokens":\#(cacheRead),"cache_creation_input_tokens":0,"output_tokens":\#(output)}}}"#
+    }
+    let data = Data([
+        line("1", "claude-opus-5-5", hoursAgo: 1, input: 100, cacheRead: 90_000, output: 200),
+        line("1", "claude-opus-5-5", hoursAgo: 1, input: 100, cacheRead: 90_000, output: 200),
+        line("2", "claude-haiku-5-5", hoursAgo: 1, input: 50, cacheRead: 0, output: 50),
+        line("3", "claude-fable-5-2", hoursAgo: 30, input: 300, cacheRead: 0, output: 300),
+    ].joined(separator: "\n").utf8)
+    let rows = ModelBreakdown.aggregate(ModelBreakdown.parseClaude(data), now: now)
+    #expect(rows.map(\.model) == ["Fable 5.2", "Opus 5.5", "Haiku 5.5"])
+    #expect(rows[1].session == 0.75)
+    #expect(rows[0].session == 0)
+    #expect(rows[0].weekly == 0.6)
 }

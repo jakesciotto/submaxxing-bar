@@ -130,7 +130,7 @@ struct MenuContent: View {
                 }
                 ForEach(store.visible) { id in
                     if let entry = store.entries[id] {
-                        ProviderSection(id: id, entry: entry, showSpend: store.settings.showSpend, now: now)
+                        ProviderSection(id: id, entry: entry, store: store, now: now)
                     }
                 }
                 Divider()
@@ -150,7 +150,7 @@ struct MenuContent: View {
 struct ProviderSection: View {
     let id: ProviderID
     let entry: UsageStore.Entry
-    let showSpend: Bool
+    let store: UsageStore
     let now: Date
 
     var body: some View {
@@ -164,11 +164,12 @@ struct ProviderSection: View {
                 }
             }
             if let snapshot = entry.snapshot {
-                let meters = snapshot.meters.filter { showSpend || $0.kind == .quota }
+                let meters = snapshot.meters.filter { store.settings.showSpend || $0.kind == .quota }
                 if meters.isEmpty {
                     Text("No limits reported.").face(11).foregroundStyle(.secondary)
                 }
                 ForEach(meters) { MeterRow(meter: $0, now: now) }
+                if id.hasLocalLogs { BreakdownSection(id: id, store: store) }
             }
             if let error = entry.error {
                 Text(error.message)
@@ -177,6 +178,71 @@ struct ProviderSection: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+}
+
+struct BreakdownSection: View {
+    static let column: CGFloat = 40
+
+    let id: ProviderID
+    let store: UsageStore
+
+    var body: some View {
+        let expanded = store.settings.expandedBreakdowns.contains(id)
+        VStack(alignment: .leading, spacing: 5) {
+            Button {
+                if expanded {
+                    store.settings.expandedBreakdowns.remove(id)
+                } else {
+                    store.settings.expandedBreakdowns.insert(id)
+                    Task { await store.loadBreakdown(id) }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8, weight: .bold))
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                        .frame(width: 8)
+                    Text("By model")
+                    Spacer()
+                    if expanded {
+                        Text("5h").frame(width: Self.column, alignment: .trailing)
+                        Text("7d").frame(width: Self.column, alignment: .trailing)
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .face(11)
+            .foregroundStyle(.secondary)
+            if expanded {
+                if let breakdown = store.breakdowns[id] {
+                    if breakdown.rows.isEmpty {
+                        Text("No local usage in 7 days.").face(10).foregroundStyle(.tertiary).padding(.leading, 12)
+                    }
+                    ForEach(breakdown.rows) { row in
+                        HStack(spacing: 4) {
+                            Text(row.model)
+                            Spacer()
+                            Text(Self.percent(row.session)).frame(width: Self.column, alignment: .trailing)
+                            Text(Self.percent(row.weekly)).frame(width: Self.column, alignment: .trailing)
+                        }
+                        .face(11)
+                        .monospacedDigit()
+                        .padding(.leading, 12)
+                    }
+                    Text(id.breakdownNote).face(9).foregroundStyle(.tertiary).padding(.leading, 12)
+                } else {
+                    Text("Reading logs…").face(10).foregroundStyle(.tertiary).padding(.leading, 12)
+                }
+            }
+        }
+    }
+
+    static func percent(_ share: Double) -> String {
+        if share <= 0 { return "0%" }
+        if share < 0.01 { return "<1%" }
+        return "\(Int((share * 100).rounded()))%"
     }
 }
 

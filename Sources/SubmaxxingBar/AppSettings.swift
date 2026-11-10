@@ -26,6 +26,12 @@ extension ProviderID {
         }
     }
 
+    var hasLocalLogs: Bool { self != .cursor }
+
+    var breakdownNote: String {
+        self == .claude ? "Claude Code on this Mac, share of tokens" : "Codex on this Mac, share of tokens"
+    }
+
     var shortName: String {
         switch self {
         case .claude: "Cl"
@@ -65,6 +71,9 @@ final class AppSettings {
     var showSpend: Bool {
         didSet { defaults.set(showSpend, forKey: "showSpend") }
     }
+    var expandedBreakdowns: Set<ProviderID> {
+        didSet { save(expandedBreakdowns, forKey: "expandedBreakdowns") }
+    }
     var refreshMinutes: Int {
         didSet { defaults.set(refreshMinutes, forKey: "refreshMinutes") }
     }
@@ -90,6 +99,7 @@ final class AppSettings {
         menuBarLabels = MenuBarLabels(rawValue: defaults.string(forKey: "menuBarLabels") ?? "") ?? .short
         showPercent = defaults.object(forKey: "showPercent") as? Bool ?? true
         showSpend = defaults.object(forKey: "showSpend") as? Bool ?? true
+        expandedBreakdowns = Set((defaults.stringArray(forKey: "expandedBreakdowns") ?? []).compactMap(ProviderID.init(rawValue:)))
         let storedMinutes = defaults.object(forKey: "refreshMinutes") as? Int ?? 5
         refreshMinutes = Self.refreshChoices.contains(storedMinutes) ? storedMinutes : 5
         launchAtLogin = SMAppService.mainApp.status == .enabled

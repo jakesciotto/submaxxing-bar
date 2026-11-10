@@ -15,9 +15,15 @@ final class UsageStore {
     private(set) var isRefreshing = false
     private(set) var lastRefresh: Date?
     private(set) var diagnosticsMessage: String?
+    private(set) var breakdowns: [ProviderID: Breakdown] = [:]
+    private(set) var loadingBreakdowns: Set<ProviderID> = []
     @ObservationIgnored let settings: AppSettings
     @ObservationIgnored private let providers: [any UsageProvider]
     @ObservationIgnored private var loop: Task<Void, Never>?
+    @ObservationIgnored private let indexes: [ProviderID: BreakdownIndex] = [
+        .claude: BreakdownIndex(provider: .claude),
+        .codex: BreakdownIndex(provider: .codex),
+    ]
     @ObservationIgnored private var backoff: [ProviderID: (until: Date, attempts: Int)] = [:]
 
     init(providers: [any UsageProvider], settings: AppSettings) {
@@ -77,6 +83,20 @@ final class UsageStore {
         isRefreshing = false
     }
 
+    func loadBreakdown(_ id: ProviderID) async {
+        guard let index = indexes[id], !loadingBreakdowns.contains(id) else { return }
+        if let existing = breakdowns[id], Date().timeIntervalSince(existing.computedAt) < 300 { return }
+        loadingBreakdowns.insert(id)
+        breakdowns[id] = await index.compute()
+        loadingBreakdowns.remove(id)
+    }
+
+    func refreshExpandedBreakdowns() {
+        for id in settings.expandedBreakdowns {
+            Task { await loadBreakdown(id) }
+        }
+    }
+
     func copyDiagnostics() async {
         diagnosticsMessage = "Collecting…"
         let report = await Diagnostics.report(providers: providers)
@@ -118,6 +138,13 @@ final class UsageStore {
         for snapshot in Demo.snapshots(now: now) {
             store.entries[snapshot.provider] = Entry(snapshot: snapshot)
         }
+        store.breakdowns[.claude] = Breakdown(rows: [
+            ModelShare(model: "Opus 5.5", session: 0.72, weekly: 0.58),
+            ModelShare(model: "Fable 5.2", session: 0.21, weekly: 0.34),
+            ModelShare(model: "Haiku 5.5", session: 0.07, weekly: 0.08),
+        ], computedAt: now)
+        store.breakdowns[.codex] = Breakdown(rows: [ModelShare(model: "gpt-5.6-sol", session: 1, weekly: 1)], computedAt: now)
+        settings.expandedBreakdowns = [.claude]
         if codexExpired {
             store.entries[.codex] = Entry(error: .needsSignIn("Sign-in expired. Open Codex in ChatGPT."))
         }

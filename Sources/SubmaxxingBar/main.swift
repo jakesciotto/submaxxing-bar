@@ -3,7 +3,24 @@ import LimitsCore
 
 let arguments = CommandLine.arguments
 
-if arguments.contains("--dump") {
+if arguments.contains("--breakdown") {
+    Task {
+        for id in [ProviderID.claude, .codex] {
+            let index = BreakdownIndex(provider: id)
+            let start = Date()
+            let first = await index.compute()
+            let cold = Date().timeIntervalSince(start)
+            _ = await index.compute()
+            let warm = Date().timeIntervalSince(start) - cold
+            print("== \(id.displayName): \(String(format: "%.2f", cold))s cold, \(String(format: "%.2f", warm))s warm")
+            for row in first.rows {
+                print(String(format: "  %-16@ 5h %5.1f%%   7d %5.1f%%", row.model as NSString, row.session * 100, row.weekly * 100))
+            }
+        }
+        exit(0)
+    }
+    dispatchMain()
+} else if arguments.contains("--dump") {
     Task {
         print(await Diagnostics.report(providers: Providers.all))
         exit(0)
