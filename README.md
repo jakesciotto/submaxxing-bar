@@ -30,8 +30,9 @@ New menu bar items can start hidden. If you do not see the meter, check Bartende
 
 <img src="docs/menubar.png" width="400" alt="Menu bar styles">
 
-- Show or hide each subscription in the popover and in the menu bar.
-- Pick a menu bar style: compact (the highest meter) or one meter per subscription.
+- Show or hide each subscription in the popover.
+- Pick what each subscription shows in the menu bar: off, its highest meter, or one specific meter (for example Session or Weekly).
+- Pick a menu bar style: compact (the highest of your picks) or one meter per subscription.
 - Hide spend rows (extra usage, credits, on-demand). Spend rows never drive the menu bar.
 - Set the refresh interval, launch at login, and copy diagnostics. Diagnostics never include tokens.
 

@@ -81,6 +81,7 @@ public enum FetchError: Error, Equatable, Sendable {
     case needsSignIn(String)
     case unsupported(String)
     case http(Int)
+    case rateLimited(until: Date?)
     case badResponse(String)
     case network(String)
 
@@ -90,6 +91,8 @@ public enum FetchError: Error, Equatable, Sendable {
         case .needsSignIn(let hint): hint
         case .unsupported(let text): text
         case .http(let code): "HTTP \(code)"
+        case .rateLimited(let until):
+            until.map { "Rate limited. Next try \($0.formatted(date: .omitted, time: .shortened))." } ?? "Rate limited."
         case .badResponse(let text): text
         case .network(let text): text
         }

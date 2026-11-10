@@ -38,15 +38,20 @@ extension ProviderID {
 @MainActor
 @Observable
 final class AppSettings {
-    static let refreshChoices = [2, 5, 10, 15]
+    static let refreshChoices = [5, 10, 15, 30]
+    static let off = "off"
+    static let highest = "highest"
 
     @ObservationIgnored private let defaults: UserDefaults
 
     var enabled: Set<ProviderID> {
         didSet { save(enabled, forKey: "enabled") }
     }
-    var menuBarProviders: Set<ProviderID> {
-        didSet { save(menuBarProviders, forKey: "menuBarProviders") }
+    var menuBarChoices: [ProviderID: String] {
+        didSet {
+            let stored = Dictionary(uniqueKeysWithValues: menuBarChoices.map { ($0.key.rawValue, $0.value) })
+            defaults.set(stored, forKey: "menuBarChoices")
+        }
     }
     var menuBarStyle: MenuBarStyle {
         didSet { defaults.set(menuBarStyle.rawValue, forKey: "menuBarStyle") }
@@ -71,13 +76,27 @@ final class AppSettings {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         enabled = Self.providers(defaults, forKey: "enabled")
-        menuBarProviders = Self.providers(defaults, forKey: "menuBarProviders")
+        if let stored = defaults.dictionary(forKey: "menuBarChoices") as? [String: String] {
+            menuBarChoices = Dictionary(uniqueKeysWithValues: stored.compactMap { key, value in
+                ProviderID(rawValue: key).map { ($0, value) }
+            })
+        } else {
+            let legacy = defaults.stringArray(forKey: "menuBarProviders")
+            menuBarChoices = Dictionary(uniqueKeysWithValues: ProviderID.allCases.map { id in
+                (id, legacy.map { $0.contains(id.rawValue) ? Self.highest : Self.off } ?? Self.highest)
+            })
+        }
         menuBarStyle = MenuBarStyle(rawValue: defaults.string(forKey: "menuBarStyle") ?? "") ?? .compact
         menuBarLabels = MenuBarLabels(rawValue: defaults.string(forKey: "menuBarLabels") ?? "") ?? .short
         showPercent = defaults.object(forKey: "showPercent") as? Bool ?? true
         showSpend = defaults.object(forKey: "showSpend") as? Bool ?? true
-        refreshMinutes = defaults.object(forKey: "refreshMinutes") as? Int ?? 5
+        let storedMinutes = defaults.object(forKey: "refreshMinutes") as? Int ?? 5
+        refreshMinutes = Self.refreshChoices.contains(storedMinutes) ? storedMinutes : 5
         launchAtLogin = SMAppService.mainApp.status == .enabled
+    }
+
+    func menuBarChoice(for id: ProviderID) -> String {
+        menuBarChoices[id] ?? Self.highest
     }
 
     private static func providers(_ defaults: UserDefaults, forKey key: String) -> Set<ProviderID> {

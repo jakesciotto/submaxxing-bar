@@ -80,7 +80,10 @@ enum JWT {
 }
 
 enum HTTP {
-    struct StatusError: Error { let code: Int }
+    struct StatusError: Error {
+        let code: Int
+        let retryAfter: Double?
+    }
 
     static let session = URLSession(configuration: .ephemeral)
 
@@ -90,8 +93,11 @@ enum HTTP {
         request.setValue("SubmaxxingBar/0.1", forHTTPHeaderField: "User-Agent")
         for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
         let (data, response) = try await session.data(for: request)
-        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard code == 200 else { throw StatusError(code: code) }
+        let http = response as? HTTPURLResponse
+        let code = http?.statusCode ?? 0
+        guard code == 200 else {
+            throw StatusError(code: code, retryAfter: http?.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init))
+        }
         return data
     }
 
@@ -99,7 +105,11 @@ enum HTTP {
         do {
             return try await get(url, headers: headers)
         } catch let error as StatusError {
-            throw error.code == 401 || error.code == 403 ? rejected(error.code) : FetchError.http(error.code)
+            switch error.code {
+            case 429: throw FetchError.rateLimited(until: error.retryAfter.map { Date().addingTimeInterval($0) })
+            case 401, 403: throw rejected(error.code)
+            default: throw FetchError.http(error.code)
+            }
         }
     }
 }

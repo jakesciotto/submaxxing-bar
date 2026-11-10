@@ -52,23 +52,6 @@ enum Level {
     }
 }
 
-struct MenuBarLabel: View {
-    let store: UsageStore
-
-    var body: some View {
-        let segments = store.menuBarSegments
-        if segments.isEmpty {
-            Image(systemName: "gauge.with.dots.needle.33percent")
-        } else {
-            Image(nsImage: MenuBarImage.make(
-                segments,
-                showPercent: store.settings.showPercent,
-                percentSign: store.settings.menuBarStyle == .compact
-            ))
-        }
-    }
-}
-
 enum MenuBarImage {
     struct Segment: Sendable, Equatable {
         let label: String?
@@ -155,6 +138,7 @@ struct MenuContent: View {
             }
             .padding(14)
             .frame(width: 290)
+            .fixedSize(horizontal: false, vertical: true)
         }
         .onAppear {
             guard refreshOnAppear else { return }
@@ -263,7 +247,10 @@ struct Footer: View {
         HStack(spacing: 14) {
             Text(status).face(11).foregroundStyle(.tertiary)
             Spacer()
-            Button { SettingsWindow.shared.show(store: store) } label: { Image(systemName: "gearshape") }
+            Button {
+                StatusItemController.shared?.closePopover()
+                SettingsWindow.shared.show(store: store)
+            } label: { Image(systemName: "gearshape") }
                 .keyboardShortcut(",")
                 .help("Settings")
             Button { Task { await store.refresh(force: true) } } label: { Image(systemName: "arrow.clockwise") }

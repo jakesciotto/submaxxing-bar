@@ -23,6 +23,7 @@ final class SettingsWindow {
 
 struct SettingsView: View {
     static let column: CGFloat = 64
+    static let menuColumn: CGFloat = 130
 
     let store: UsageStore
     @Bindable var settings: AppSettings
@@ -35,7 +36,7 @@ struct SettingsView: View {
                     HStack(spacing: 0) {
                         Spacer()
                         Text("Popover").frame(width: Self.column)
-                        Text("Menu bar").frame(width: Self.column)
+                        Text("Menu bar").frame(width: Self.menuColumn)
                     }
                     .face(10, .medium)
                     .foregroundStyle(.secondary)
@@ -85,7 +86,7 @@ struct SettingsView: View {
             .formStyle(.grouped)
             .face(13)
             .scrollDisabled(true)
-            .frame(width: 480)
+            .frame(width: 540)
             .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -117,12 +118,15 @@ struct ProviderRow: View {
                 .toggleStyle(.switch)
                 .controlSize(.small)
                 .frame(width: SettingsView.column)
-            Toggle("Show \(id.displayName) in menu bar", isOn: menuBarBinding)
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .frame(width: SettingsView.column)
-                .disabled(!settings.enabled.contains(id))
+            Picker("Menu bar for \(id.displayName)", selection: choiceBinding) {
+                Text("Off").tag(AppSettings.off)
+                Text("Highest").tag(AppSettings.highest)
+                ForEach(meterChoices, id: \.self) { Text($0).tag($0) }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(width: SettingsView.menuColumn)
+            .disabled(!settings.enabled.contains(id))
         }
         .padding(.vertical, 2)
         .help(id.sourceDescription)
@@ -142,13 +146,20 @@ struct ProviderRow: View {
         )
     }
 
-    private var menuBarBinding: Binding<Bool> {
+    private var choiceBinding: Binding<String> {
         Binding(
-            get: { settings.enabled.contains(id) && settings.menuBarProviders.contains(id) },
-            set: { isOn in
-                if isOn { settings.menuBarProviders.insert(id) } else { settings.menuBarProviders.remove(id) }
-            }
+            get: { settings.menuBarChoice(for: id) },
+            set: { settings.menuBarChoices[id] = $0 }
         )
+    }
+
+    private var meterChoices: [String] {
+        var labels = store.entries[id]?.snapshot?.meters.filter { $0.kind == .quota }.map(\.label) ?? []
+        let current = settings.menuBarChoice(for: id)
+        if current != AppSettings.off, current != AppSettings.highest, !labels.contains(current) {
+            labels.append(current)
+        }
+        return labels
     }
 
     private var status: (color: Color, text: String) {

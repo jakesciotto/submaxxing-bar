@@ -20,6 +20,10 @@ if arguments.contains("--dump") {
     Preview.render(to: arguments[index + 1], dark: arguments.contains("--dark"), settingsPage: arguments.contains("--settings"), typeface: typeface)
     exit(0)
 } else {
-    NSApplication.shared.setActivationPolicy(.accessory)
-    SubmaxxingApp.main()
+    let app = NSApplication.shared
+    app.setActivationPolicy(.accessory)
+    let store = UsageStore(providers: arguments.contains("--demo") ? Demo.providers : Providers.all, settings: AppSettings())
+    let controller = StatusItemController(store: store)
+    store.start()
+    withExtendedLifetime(controller) { app.run() }
 }

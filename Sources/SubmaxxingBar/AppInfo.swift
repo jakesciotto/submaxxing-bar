@@ -1,4 +1,4 @@
 enum AppInfo {
     static let name = "Submaxxing Bar"
-    static let version = "0.1.0"
+    static let version = "0.1.1"
 }

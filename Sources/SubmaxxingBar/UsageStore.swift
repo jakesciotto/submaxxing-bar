@@ -18,6 +18,7 @@ final class UsageStore {
     @ObservationIgnored let settings: AppSettings
     @ObservationIgnored private let providers: [any UsageProvider]
     @ObservationIgnored private var loop: Task<Void, Never>?
+    @ObservationIgnored private var backoff: [ProviderID: (until: Date, attempts: Int)] = [:]
 
     init(providers: [any UsageProvider], settings: AppSettings) {
         self.providers = providers
@@ -36,9 +37,10 @@ final class UsageStore {
 
     func refresh(force: Bool = false) async {
         guard !isRefreshing else { return }
-        if !force, let lastRefresh, Date().timeIntervalSince(lastRefresh) < 60 { return }
+        if !force, let lastRefresh, Date().timeIntervalSince(lastRefresh) < 120 { return }
         isRefreshing = true
-        let active = providers.filter { settings.enabled.contains($0.id) }
+        let now = Date()
+        let active = providers.filter { settings.enabled.contains($0.id) && (backoff[$0.id]?.until ?? .distantPast) <= now }
         let results = await withTaskGroup(of: (ProviderID, Result<UsageSnapshot, FetchError>).self) { group in
             for provider in active {
                 group.addTask {
@@ -59,6 +61,13 @@ final class UsageStore {
             case .success(let snapshot):
                 entry.snapshot = snapshot
                 entry.error = nil
+                backoff[id] = nil
+            case .failure(.rateLimited(let until)):
+                let attempts = (backoff[id]?.attempts ?? 0) + 1
+                let wait = min(3600, 300 * pow(2, Double(attempts - 1)))
+                let next = max(until ?? .distantPast, Date().addingTimeInterval(wait))
+                backoff[id] = (next, attempts)
+                entry.error = .rateLimited(until: next)
             case .failure(let error):
                 entry.error = error
             }
@@ -84,9 +93,15 @@ final class UsageStore {
     }
 
     var menuBarSegments: [MenuBarImage.Segment] {
-        let items = visible
-            .filter { settings.menuBarProviders.contains($0) }
-            .compactMap { id in entries[id]?.snapshot?.peakPercent.map { (id: id, percent: $0) } }
+        let items: [(id: ProviderID, percent: Double)] = visible.compactMap { id in
+            let choice = settings.menuBarChoice(for: id)
+            guard choice != AppSettings.off, let snapshot = entries[id]?.snapshot else { return nil }
+            if choice != AppSettings.highest,
+               let meter = snapshot.meters.first(where: { $0.kind == .quota && $0.label == choice }) {
+                return (id, meter.usedPercent)
+            }
+            return snapshot.peakPercent.map { (id, $0) }
+        }
         switch settings.menuBarStyle {
         case .compact:
             guard let peak = items.map(\.percent).max() else { return [] }
