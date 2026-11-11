@@ -166,9 +166,9 @@ public actor BreakdownIndex {
         case .claude: home.appending(path: ".claude/projects")
         case .codex: ProcessInfo.processInfo.environment["CODEX_HOME"].map { URL(fileURLWithPath: $0) }?.appending(path: "sessions")
             ?? home.appending(path: ".codex/sessions")
-        case .cursor: home
+        case .cursor, .antigravity: home
         }
-        guard provider != .cursor else { return [] }
+        guard provider == .claude || provider == .codex else { return [] }
         let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey]
         guard let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: keys) else { return [] }
         var files: [(URL, Date, Int)] = []

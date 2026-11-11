@@ -319,7 +319,7 @@ struct Footer: View {
             } label: { Image(systemName: "gearshape") }
                 .keyboardShortcut(",")
                 .help("Settings")
-            Button { Task { await store.refresh(force: true) } } label: { Image(systemName: "arrow.clockwise") }
+            Button { Task { await store.refresh(force: true, manual: true) } } label: { Image(systemName: "arrow.clockwise") }
                 .keyboardShortcut("r")
                 .help("Refresh")
             Button { NSApplication.shared.terminate(nil) } label: { Image(systemName: "power") }

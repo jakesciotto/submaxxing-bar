@@ -1,7 +1,7 @@
 import Foundation
 
 public enum ProviderID: String, CaseIterable, Sendable, Codable, Identifiable {
-    case claude, codex, cursor
+    case claude, codex, cursor, antigravity
 
     public var id: String { rawValue }
 
@@ -10,6 +10,7 @@ public enum ProviderID: String, CaseIterable, Sendable, Codable, Identifiable {
         case .claude: "Claude"
         case .codex: "Codex"
         case .cursor: "Cursor"
+        case .antigravity: "Antigravity"
         }
     }
 }
@@ -108,9 +109,14 @@ public enum FetchError: Error, Equatable, Sendable {
 
 public protocol UsageProvider: Sendable {
     var id: ProviderID { get }
+    var minimumInterval: TimeInterval { get }
     func fetch() async throws -> FetchResult
 }
 
+extension UsageProvider {
+    public var minimumInterval: TimeInterval { 0 }
+}
+
 public enum Providers {
-    public static let all: [any UsageProvider] = [ClaudeProvider(), CodexProvider(), CursorProvider()]
+    public static let all: [any UsageProvider] = [ClaudeProvider(), CodexProvider(), CursorProvider(), AntigravityProvider()]
 }

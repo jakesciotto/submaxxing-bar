@@ -25,6 +25,7 @@ final class UsageStore {
         .codex: BreakdownIndex(provider: .codex),
     ]
     @ObservationIgnored private var backoff: [ProviderID: (until: Date, attempts: Int)] = [:]
+    @ObservationIgnored private var lastAttempt: [ProviderID: Date] = [:]
 
     init(providers: [any UsageProvider], settings: AppSettings) {
         self.providers = providers
@@ -41,12 +42,17 @@ final class UsageStore {
         }
     }
 
-    func refresh(force: Bool = false) async {
+    func refresh(force: Bool = false, manual: Bool = false) async {
         guard !isRefreshing else { return }
         if !force, let lastRefresh, Date().timeIntervalSince(lastRefresh) < 120 { return }
         isRefreshing = true
         let now = Date()
-        let active = providers.filter { settings.enabled.contains($0.id) && (backoff[$0.id]?.until ?? .distantPast) <= now }
+        let active = providers.filter { provider in
+            settings.enabled.contains(provider.id)
+                && (backoff[provider.id]?.until ?? .distantPast) <= now
+                && (manual || now.timeIntervalSince(lastAttempt[provider.id] ?? .distantPast) >= provider.minimumInterval)
+        }
+        for provider in active { lastAttempt[provider.id] = now }
         let results = await withTaskGroup(of: (ProviderID, Result<UsageSnapshot, FetchError>).self) { group in
             for provider in active {
                 group.addTask {

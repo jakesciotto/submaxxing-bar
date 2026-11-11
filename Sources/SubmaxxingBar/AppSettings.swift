@@ -23,10 +23,11 @@ extension ProviderID {
         case .claude: "Keychain"
         case .codex: "~/.codex/auth.json"
         case .cursor: "Cursor app"
+        case .antigravity: "agy CLI"
         }
     }
 
-    var hasLocalLogs: Bool { self != .cursor }
+    var hasLocalLogs: Bool { self == .claude || self == .codex }
 
     var breakdownNote: String {
         self == .claude ? "Claude Code on this Mac, share of tokens" : "Codex on this Mac, share of tokens"
@@ -37,6 +38,7 @@ extension ProviderID {
         case .claude: "CL"
         case .codex: "CX"
         case .cursor: "CU"
+        case .antigravity: "AG"
         }
     }
 }

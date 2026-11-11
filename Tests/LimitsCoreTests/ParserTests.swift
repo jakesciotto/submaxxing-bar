@@ -79,3 +79,42 @@ import Testing
     #expect(rows[0].session == 0)
     #expect(rows[0].weekly == 0.6)
 }
+
+@Test func antigravityLabelsEachGroupWindowShortestFirstAndConvertsRemainingToUsed() throws {
+    let json = """
+    {"response":{"groups":[
+      {"displayName":"Gemini Models","buckets":[
+        {"bucketId":"gemini-weekly","window":"weekly","remainingFraction":0.75,"resetTime":"2026-11-18T18:25:10Z"},
+        {"bucketId":"gemini-5h","window":"5h","remainingFraction":0.5,"resetTime":"2026-11-11T23:25:10Z"}]},
+      {"displayName":"Claude and GPT models","buckets":[
+        {"bucketId":"3p-5h","window":"5h","remainingFraction":1,"resetTime":"2026-11-11T23:32:29Z"}]}]}}
+    """
+    let snapshot = try AntigravityParser.parse(Data(json.utf8), now: Date())
+    #expect(snapshot.meters.map(\.label) == ["Gemini 5h", "Gemini weekly", "Claude/GPT 5h"])
+    #expect(snapshot.meters.map(\.usedPercent) == [50, 25, 0])
+    #expect(snapshot.meters[0].resetsAt == ISO8601DateFormatter().date(from: "2026-11-11T23:25:10Z"))
+    #expect(snapshot.peakPercent == 50)
+}
+
+@Test func antigravityTreatsAnOmittedRemainingFractionAsExhausted() throws {
+    let json = #"{"response":{"groups":[{"displayName":"Gemini Models","buckets":[{"bucketId":"gemini-5h","window":"5h"}]}]}}"#
+    let snapshot = try AntigravityParser.parse(Data(json.utf8), now: Date())
+    #expect(snapshot.meters[0].usedPercent == 100)
+}
+
+@Test func antigravityRejectsAResponseWithoutGroups() {
+    #expect(throws: FetchError.self) {
+        try AntigravityParser.parse(Data(#"{"response":{}}"#.utf8), now: Date())
+    }
+}
+
+@Test func antigravityReadsTheHTTPPortAndNotTheGRPCPort() {
+    let log = """
+    I1111 11:16:41.630409      23 server.go:789] Language server will attempt to listen on host localhost
+    I1111 11:16:41.631878      23 server.go:804] Language server listening on random port at 60839 for HTTPS (gRPC)
+    I1111 11:16:41.632028      23 server.go:812] Language server listening on random port at 60840 for HTTP
+    I1111 11:16:41.700000      23 server.go:900] ready
+    """
+    #expect(AntigravityProvider.port(inLog: log) == 60840)
+    #expect(AntigravityProvider.port(inLog: "Starting ACP server") == nil)
+}

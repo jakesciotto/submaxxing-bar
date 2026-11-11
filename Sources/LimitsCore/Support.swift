@@ -87,8 +87,18 @@ enum HTTP {
 
     static let session = URLSession(configuration: .ephemeral)
 
-    static func get(_ url: URL, headers: [String: String]) async throws -> Data {
+    static func get(_ url: URL, headers: [String: String], rejected: (Int) -> FetchError) async throws -> Data {
+        try await send(url, method: "GET", body: nil, headers: headers, rejected: rejected)
+    }
+
+    static func post(_ url: URL, body: Data, headers: [String: String], rejected: (Int) -> FetchError) async throws -> Data {
+        try await send(url, method: "POST", body: body, headers: headers, rejected: rejected)
+    }
+
+    private static func request(_ url: URL, method: String, body: Data?, headers: [String: String]) async throws -> Data {
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        request.httpMethod = method
+        request.httpBody = body
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("SubmaxxingBar/0.1", forHTTPHeaderField: "User-Agent")
         for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
@@ -101,9 +111,9 @@ enum HTTP {
         return data
     }
 
-    static func get(_ url: URL, headers: [String: String], rejected: (Int) -> FetchError) async throws -> Data {
+    private static func send(_ url: URL, method: String, body: Data?, headers: [String: String], rejected: (Int) -> FetchError) async throws -> Data {
         do {
-            return try await get(url, headers: headers)
+            return try await request(url, method: method, body: body, headers: headers)
         } catch let error as StatusError {
             switch error.code {
             case 429: throw FetchError.rateLimited(until: error.retryAfter.map { Date().addingTimeInterval($0) })

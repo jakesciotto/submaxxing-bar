@@ -19,6 +19,12 @@ enum Demo {
             UsageSnapshot(provider: .cursor, plan: "Ultra", meters: [
                 Meter(label: "Included", usedPercent: 12, resetsAt: now.addingTimeInterval(11 * 86_400), detail: "$48 / $400"),
             ], fetchedAt: now),
+            UsageSnapshot(provider: .antigravity, plan: nil, meters: [
+                Meter(label: "Gemini 5h", usedPercent: 34, resetsAt: now.addingTimeInterval(150 * 60)),
+                Meter(label: "Gemini weekly", usedPercent: 12, resetsAt: now.addingTimeInterval(6 * 86_400)),
+                Meter(label: "Claude/GPT 5h", usedPercent: 0, resetsAt: now.addingTimeInterval(300 * 60)),
+                Meter(label: "Claude/GPT weekly", usedPercent: 3, resetsAt: now.addingTimeInterval(6 * 86_400)),
+            ], fetchedAt: now),
         ]
     }
 
