@@ -34,9 +34,9 @@ extension ProviderID {
 
     var shortName: String {
         switch self {
-        case .claude: "Cl"
-        case .codex: "Cx"
-        case .cursor: "Cu"
+        case .claude: "CL"
+        case .codex: "CX"
+        case .cursor: "CU"
         }
     }
 }

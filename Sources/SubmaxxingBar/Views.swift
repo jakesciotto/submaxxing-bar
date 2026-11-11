@@ -59,7 +59,7 @@ enum MenuBarImage {
     }
 
     static let height: CGFloat = 16
-    static let meterSize = NSSize(width: 7, height: 14)
+    static let meterSize = NSSize(width: 8, height: 14)
 
     static func make(_ segments: [Segment], showPercent: Bool, percentSign: Bool) -> NSImage {
         let width = layout(segments, showPercent: showPercent, percentSign: percentSign, draw: false)
@@ -79,7 +79,7 @@ enum MenuBarImage {
         ]
         let labelAttributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular),
-            .foregroundColor: NSColor.secondaryLabelColor,
+            .foregroundColor: NSColor.labelColor,
         ]
         var x: CGFloat = 0
         for (index, segment) in segments.enumerated() {
@@ -99,18 +99,18 @@ enum MenuBarImage {
 
     private static func text(_ string: String, attributes: [NSAttributedString.Key: Any], at x: CGFloat, draw: Bool) -> CGFloat {
         let size = (string as NSString).size(withAttributes: attributes)
-        if draw { (string as NSString).draw(at: NSPoint(x: x, y: (height - size.height) / 2), withAttributes: attributes) }
-        return size.width
+        if draw { (string as NSString).draw(at: NSPoint(x: x, y: ((height - size.height) / 2).rounded()), withAttributes: attributes) }
+        return ceil(size.width)
     }
 
     private static func meter(in rect: NSRect, percent: Double) {
         let track = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: 2, yRadius: 2)
         track.lineWidth = 1
-        NSColor.labelColor.withAlphaComponent(0.4).setStroke()
+        NSColor.labelColor.withAlphaComponent(0.7).setStroke()
         track.stroke()
-        let fill = max(1.5, (rect.height - 3) * min(max(percent, 0), 100) / 100)
+        let fill = max(1, ((rect.height - 4) * min(max(percent, 0), 100) / 100).rounded())
         Level.nsColor(percent).setFill()
-        NSBezierPath(roundedRect: NSRect(x: rect.minX + 1.5, y: rect.minY + 1.5, width: rect.width - 3, height: fill), xRadius: 1, yRadius: 1).fill()
+        NSBezierPath(roundedRect: NSRect(x: rect.minX + 2, y: rect.minY + 2, width: rect.width - 4, height: fill), xRadius: 1, yRadius: 1).fill()
     }
 }
 
