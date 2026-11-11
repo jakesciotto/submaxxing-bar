@@ -4,7 +4,8 @@ set -euo pipefail
 REPO="jakesciotto/submaxxing-bar"
 NAME="Submaxxing Bar"
 EXECUTABLE="SubmaxxingBar"
-DEST="$HOME/Applications"
+DEST="/Applications"
+[[ -w "$DEST" ]] || DEST="$HOME/Applications"
 
 fail() { echo "submaxxing bar: $*" >&2; exit 1; }
 
@@ -37,7 +38,12 @@ mkdir -p "$DEST"
 rm -rf "${DEST:?}/$NAME.app"
 ditto "$tmp/out/$NAME.app" "$DEST/$NAME.app"
 xattr -dr com.apple.quarantine "$DEST/$NAME.app" 2>/dev/null || true
+if [[ "$DEST" == "/Applications" ]]; then rm -rf "$HOME/Applications/$NAME.app"; fi
 open "$DEST/$NAME.app"
 
 echo "installed $DEST/$NAME.app and opened it."
 echo "look for the meter in your menu bar. if it is hidden, check Bartender or System Settings > Menu Bar."
+if [[ "$DEST" != "/Applications" ]]; then
+  echo "note: /Applications is not writable for you, so the app went to ~/Applications."
+  echo "macOS 27 and Bartender only manage menu bar items from /Applications. move it there with an admin account."
+fi
