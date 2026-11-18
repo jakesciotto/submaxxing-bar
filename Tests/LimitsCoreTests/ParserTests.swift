@@ -61,6 +61,31 @@ import Testing
     }
 }
 
+let cursorEncryptedToken = "cursor-safe-storage:v1:djEwghcbhtGUZrQfNzxvURNwsGxX0pqjpITUisZjNOgqkZ3mpDt+WBHlIJ5WlO4mkSAYzewP3u3YHY4RNaXLfSjtLbzYTAZ7j7GDlDUA+GVLjxc="
+
+@Test func cursorDecryptsASafeStorageTokenMadeByOpenSSL() throws {
+    let key = CursorSafeStorage.deriveKey(password: Data("test-safe-storage-password".utf8))
+    #expect(key.map { String(format: "%02x", $0) }.joined() == "8d980c26091f4ec99749af7dd4090b2e")
+    let token = try CursorSafeStorage.decrypt(cursorEncryptedToken, key: key)
+    #expect(token == "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJnb29nbGUtb2F1dGgyfHVzZXJfMDFURVNUIn0.c2ln")
+    #expect(JWT.claims(token)["sub"] as? String == "google-oauth2|user_01TEST")
+}
+
+@Test func cursorRejectsATokenDecryptedWithTheWrongKey() {
+    let key = CursorSafeStorage.deriveKey(password: Data("wrong-password".utf8))
+    #expect(throws: FetchError.badResponse("Cannot decrypt Cursor token.")) {
+        try CursorSafeStorage.decrypt(cursorEncryptedToken, key: key)
+    }
+}
+
+@Test func cursorRejectsASafeStorageValueWithoutTheV10Marker() {
+    let key = CursorSafeStorage.deriveKey(password: Data("test-safe-storage-password".utf8))
+    let unmarked = "cursor-safe-storage:v1:" + Data("v11".utf8 + Data(repeating: 0, count: 16)).base64EncodedString()
+    #expect(throws: FetchError.badResponse("Cannot decrypt Cursor token.")) {
+        try CursorSafeStorage.decrypt(unmarked, key: key)
+    }
+}
+
 @Test func breakdownDedupesRepeatsSkipsCacheReadsAndSplitsWindows() {
     let now = Date(timeIntervalSince1970: 1_794_000_000)
     func line(_ id: String, _ model: String, hoursAgo: Double, input: Int, cacheRead: Int, output: Int) -> String {

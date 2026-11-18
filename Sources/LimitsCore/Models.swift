@@ -111,10 +111,12 @@ public protocol UsageProvider: Sendable {
     var id: ProviderID { get }
     var minimumInterval: TimeInterval { get }
     func fetch() async throws -> FetchResult
+    func resetDeniedAccess() async
 }
 
 extension UsageProvider {
     public var minimumInterval: TimeInterval { 0 }
+    public func resetDeniedAccess() async {}
 }
 
 public enum Providers {

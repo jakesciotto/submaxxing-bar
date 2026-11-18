@@ -53,6 +53,9 @@ final class UsageStore {
                 && (manual || now.timeIntervalSince(lastAttempt[provider.id] ?? .distantPast) >= provider.minimumInterval)
         }
         for provider in active { lastAttempt[provider.id] = now }
+        if manual {
+            for provider in active { await provider.resetDeniedAccess() }
+        }
         let results = await withTaskGroup(of: (ProviderID, Result<UsageSnapshot, FetchError>).self) { group in
             for provider in active {
                 group.addTask {

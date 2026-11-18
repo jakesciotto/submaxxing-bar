@@ -1,3 +1,4 @@
+import CommonCrypto
 import Foundation
 import SQLite3
 
@@ -8,17 +9,19 @@ public struct CursorProvider: UsageProvider {
     static let tokenKey = "cursorAuth/accessToken"
     static let membershipKey = "cursorAuth/stripeMembershipType"
 
+    public func resetDeniedAccess() async {
+        await CursorKeychain.shared.resetDenial()
+    }
+
     public func fetch() async throws -> FetchResult {
         let path = FileManager.default.homeDirectoryForCurrentUser
             .appending(path: "Library/Application Support/Cursor/User/globalStorage/state.vscdb").path
         guard FileManager.default.fileExists(atPath: path) else { throw FetchError.notConfigured }
         let values = try CursorStateDB.read(path: path, keys: [Self.tokenKey, Self.membershipKey])
-        guard let token = values[Self.tokenKey], !token.isEmpty else {
+        guard let stored = values[Self.tokenKey], !stored.isEmpty else {
             throw FetchError.needsSignIn("Signed out. Open Cursor.")
         }
-        if token.hasPrefix("cursor-safe-storage:") {
-            throw FetchError.unsupported("Encrypted token. Not supported yet.")
-        }
+        let token = try await Self.plaintext(stored)
         let claims = JWT.claims(token)
         if let expiry = JWT.expiry(token), expiry < Date() {
             throw FetchError.needsSignIn("Sign-in expired. Open Cursor.")
@@ -33,6 +36,129 @@ public struct CursorProvider: UsageProvider {
         )
         let membership = values[Self.membershipKey]
         return try FetchResult.parse(data) { try CursorParser.parse($0, membership: membership, now: Date()) }
+    }
+
+    static func plaintext(_ stored: String) async throws -> String {
+        guard CursorSafeStorage.isEncrypted(stored) else { return stored }
+        let key = try await CursorKeychain.shared.key()
+        do {
+            return try CursorSafeStorage.decrypt(stored, key: key)
+        } catch {
+            await CursorKeychain.shared.forgetKey()
+            throw error
+        }
+    }
+}
+
+enum CursorSafeStorage {
+    static let prefix = "cursor-safe-storage:v1:"
+    static let version = Data("v10".utf8)
+    static let salt = Data("saltysalt".utf8)
+    static let iterations: UInt32 = 1003
+    static let iv = Data(repeating: 0x20, count: kCCBlockSizeAES128)
+
+    static func isEncrypted(_ value: String) -> Bool {
+        value.hasPrefix(prefix)
+    }
+
+    static func deriveKey(password: Data) -> Data {
+        var key = Data(count: kCCKeySizeAES128)
+        let status = key.withUnsafeMutableBytes { keyBytes in
+            password.withUnsafeBytes { passwordBytes in
+                salt.withUnsafeBytes { saltBytes in
+                    CCKeyDerivationPBKDF(
+                        CCPBKDFAlgorithm(kCCPBKDF2),
+                        passwordBytes.baseAddress?.assumingMemoryBound(to: CChar.self), password.count,
+                        saltBytes.baseAddress?.assumingMemoryBound(to: UInt8.self), salt.count,
+                        CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA1), iterations,
+                        keyBytes.baseAddress?.assumingMemoryBound(to: UInt8.self), kCCKeySizeAES128
+                    )
+                }
+            }
+        }
+        precondition(status == kCCSuccess, "PBKDF2 failed: \(status)")
+        return key
+    }
+
+    static func decrypt(_ value: String, key: Data) throws -> String {
+        let failure = FetchError.badResponse("Cannot decrypt Cursor token.")
+        guard let blob = Data(base64Encoded: String(value.dropFirst(prefix.count))),
+              blob.starts(with: version)
+        else { throw failure }
+        let ciphertext = blob.dropFirst(version.count)
+        var plaintext = Data(count: ciphertext.count + kCCBlockSizeAES128)
+        var written = 0
+        let status = plaintext.withUnsafeMutableBytes { output in
+            ciphertext.withUnsafeBytes { input in
+                key.withUnsafeBytes { keyBytes in
+                    iv.withUnsafeBytes { ivBytes in
+                        CCCrypt(
+                            CCOperation(kCCDecrypt), CCAlgorithm(kCCAlgorithmAES), CCOptions(kCCOptionPKCS7Padding),
+                            keyBytes.baseAddress, key.count, ivBytes.baseAddress,
+                            input.baseAddress, ciphertext.count,
+                            output.baseAddress, output.count, &written
+                        )
+                    }
+                }
+            }
+        }
+        guard status == kCCSuccess, let text = String(data: plaintext.prefix(written), encoding: .utf8) else {
+            throw failure
+        }
+        return text
+    }
+}
+
+actor CursorKeychain {
+    static let shared = CursorKeychain()
+    static let service = "Cursor Safe Storage"
+    static let account = "Cursor Key"
+    static let denied = FetchError.needsSignIn("Keychain access denied. Click refresh to retry.")
+
+    private var cached: Data?
+    private var isDenied = false
+    private var pending: Task<Data, Error>?
+
+    func key() async throws -> Data {
+        if let cached { return cached }
+        if isDenied { throw Self.denied }
+        if let pending { return try await pending.value }
+        let task = Task { try await Self.read() }
+        pending = task
+        defer { pending = nil }
+        do {
+            let key = try await task.value
+            cached = key
+            return key
+        } catch let error as FetchError where error == Self.denied {
+            isDenied = true
+            throw error
+        }
+    }
+
+    func resetDenial() {
+        isDenied = false
+    }
+
+    func forgetKey() {
+        cached = nil
+    }
+
+    private static func read() async throws -> Data {
+        let result = try await Shell.run(
+            "/usr/bin/security", ["find-generic-password", "-s", service, "-a", account, "-w"], timeout: 120
+        )
+        switch result.status {
+        case 0:
+            var password = result.output
+            if password.last == UInt8(ascii: "\n") { password.removeLast() }
+            guard !password.isEmpty else { throw denied }
+            return CursorSafeStorage.deriveKey(password: password)
+        case 44:
+            throw FetchError.needsSignIn("Cursor key not in Keychain. Open Cursor.")
+        default:
+            throw denied
+        }
     }
 }
 
